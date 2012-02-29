@@ -9,6 +9,7 @@
 
 #include "dnscrypt_proxy.h"
 #include "edns.h"
+#include "utils.h"
 
 static int
 _skip_name(const uint8_t * const dns_packet, const size_t dns_packet_len,
@@ -89,11 +90,47 @@ edns_get_payload_size(const uint8_t * const dns_packet,
     return (ssize_t) payload_size;
 }
 
+static void
+_add_opendns_device_id(uint8_t opt_rr[], const size_t opt_rr_size,
+                       uint8_t const device_id[OPENDNS_DEVICE_ID_SIZE],
+                       size_t * const opt_rr_len_p)
+{
+    *opt_rr_len_p = 1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA +
+        OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE;
+    assert(opt_rr_size == *opt_rr_len_p);
+    memcpy(&opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA +
+                   OPENDNS_DEVICE_ID_PREFIX_LEN],
+           device_id, OPENDNS_DEVICE_ID_SIZE);
+
+    assert(1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_CODE + 1U
+           < *opt_rr_len_p);
+    opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_CODE] =
+        (OPENDNS_DEVICE_ID_OPTION_CODE >> 8) & 0xFF;
+    opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_CODE + 1U] =
+        OPENDNS_DEVICE_ID_OPTION_CODE & 0xFF;
+
+    assert(1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_LENGTH + 1U
+           < *opt_rr_len_p);
+    opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_LENGTH] =
+        ((OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE) >> 8) & 0xFF;
+    opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_LENGTH + 1U] =
+        (OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE) & 0xFF;
+
+    assert(1U + DNS_OFFSET_EDNS_RDLEN + 1U < *opt_rr_len_p);
+    opt_rr[1U + DNS_OFFSET_EDNS_RDLEN] =
+        ((DNS_OFFSET_EDNS_OPTION_DATA +
+          OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE) >> 8) & 0xFF;
+    opt_rr[1U + DNS_OFFSET_EDNS_RDLEN + 1U] =
+        (DNS_OFFSET_EDNS_OPTION_DATA +
+            OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE) & 0xFF;
+}
+
 int
 edns_add_section(ProxyContext * const proxy_context,
                  uint8_t * const dns_packet, size_t * const dns_packet_len_p,
                  size_t dns_packet_max_size,
-                 size_t * const request_edns_payload_size)
+                 size_t * const request_edns_payload_size,
+                 uint8_t const device_id[OPENDNS_DEVICE_ID_SIZE])
 {
     const size_t edns_payload_size = proxy_context->edns_payload_size;
 
@@ -123,17 +160,32 @@ edns_add_section(ProxyContext * const proxy_context,
         0U,               /* name */
         0U, DNS_TYPE_OPT, /* type */
         (edns_payload_size >> 8) & 0xFF, edns_payload_size & 0xFF,
-        0U, 0U, 0U, 0U,   /* rcode */
-        0U, 0U            /* rdlen */
+        0U,               /* extended rcode */
+        0U,               /* version */
+        0U, 0U,           /* flags */
+        0U, 0U,           /* rdlen */
+        0U, 0U,           /* option code */
+        0U, 0U,           /* option length */
+        'O', 'p', 'e', 'n', 'D', 'N', 'S',
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U /* device_id */
     };
-    if (dns_packet_max_size - *dns_packet_len_p < sizeof opt_rr) {
+    size_t opt_rr_len = 1U + DNS_OFFSET_EDNS_DATA;
+    COMPILER_ASSERT(sizeof opt_rr ==
+                    1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA +
+                    OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE);
+    assert(opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA]
+           == (uint8_t) 'O');
+    if (device_id != NULL) {
+        _add_opendns_device_id(opt_rr, sizeof opt_rr, device_id, &opt_rr_len);
+    }
+    if (dns_packet_max_size - *dns_packet_len_p < opt_rr_len) {
         *request_edns_payload_size = (size_t) 0U;
         return -1;
     }
     assert(dns_packet[DNS_OFFSET_ARCOUNT + 1U] == 0U);
     dns_packet[DNS_OFFSET_ARCOUNT + 1U] = 1U;
-    memcpy(dns_packet + *dns_packet_len_p, opt_rr, sizeof opt_rr);
-    *dns_packet_len_p += sizeof opt_rr;
+    memcpy(dns_packet + *dns_packet_len_p, opt_rr, opt_rr_len);
+    *dns_packet_len_p += opt_rr_len;
     *request_edns_payload_size = edns_payload_size;
     assert(*dns_packet_len_p <= dns_packet_max_size);
     assert(*dns_packet_len_p <= 0xFFFF);

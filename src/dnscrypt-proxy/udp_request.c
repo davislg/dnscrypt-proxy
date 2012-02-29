@@ -293,7 +293,8 @@ client_to_proxy_cb(uv_udp_t *handle, ssize_t nread, uv_buf_t buf,
     edns_add_section(proxy_context,
                      udp_request->dns_packet, &udp_request->dns_packet_len,
                      sizeof udp_request->dns_packet,
-                     &request_edns_payload_size);
+                     &request_edns_payload_size,
+                     NULL);
 
     udp_request->client_addr_len = sizeof(struct sockaddr_in);
     memcpy(&udp_request->client_addr, client_addr,
