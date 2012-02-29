@@ -3,6 +3,7 @@
 #include <sys/types.h>
 
 #include <assert.h>
+#include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,7 +93,7 @@ edns_get_payload_size(const uint8_t * const dns_packet,
 
 static void
 _add_opendns_device_id(uint8_t opt_rr[], const size_t opt_rr_size,
-                       uint8_t const device_id[OPENDNS_DEVICE_ID_SIZE],
+                       uint8_t const opendns_device_id[OPENDNS_DEVICE_ID_SIZE],
                        size_t * const opt_rr_len_p)
 {
     *opt_rr_len_p = 1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA +
@@ -100,7 +101,7 @@ _add_opendns_device_id(uint8_t opt_rr[], const size_t opt_rr_size,
     assert(opt_rr_size == *opt_rr_len_p);
     memcpy(&opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA +
                    OPENDNS_DEVICE_ID_PREFIX_LEN],
-           device_id, OPENDNS_DEVICE_ID_SIZE);
+           opendns_device_id, OPENDNS_DEVICE_ID_SIZE);
 
     assert(1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_CODE + 1U
            < *opt_rr_len_p);
@@ -130,7 +131,7 @@ edns_add_section(ProxyContext * const proxy_context,
                  uint8_t * const dns_packet, size_t * const dns_packet_len_p,
                  size_t dns_packet_max_size,
                  size_t * const request_edns_payload_size,
-                 uint8_t const device_id[OPENDNS_DEVICE_ID_SIZE])
+                 uint8_t const opendns_device_id[OPENDNS_DEVICE_ID_SIZE])
 {
     const size_t edns_payload_size = proxy_context->edns_payload_size;
 
@@ -167,7 +168,7 @@ edns_add_section(ProxyContext * const proxy_context,
         0U, 0U,           /* option code */
         0U, 0U,           /* option length */
         'O', 'p', 'e', 'n', 'D', 'N', 'S',
-        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U /* device_id */
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U /* opendns_device_id */
     };
     size_t opt_rr_len = 1U + DNS_OFFSET_EDNS_DATA;
     COMPILER_ASSERT(sizeof opt_rr ==
@@ -175,8 +176,9 @@ edns_add_section(ProxyContext * const proxy_context,
                     OPENDNS_DEVICE_ID_PREFIX_LEN + OPENDNS_DEVICE_ID_SIZE);
     assert(opt_rr[1U + DNS_OFFSET_EDNS_DATA + DNS_OFFSET_EDNS_OPTION_DATA]
            == (uint8_t) 'O');
-    if (device_id != NULL) {
-        _add_opendns_device_id(opt_rr, sizeof opt_rr, device_id, &opt_rr_len);
+    if (opendns_device_id != NULL) {
+        _add_opendns_device_id(opt_rr, sizeof opt_rr,
+                               opendns_device_id, &opt_rr_len);
     }
     if (dns_packet_max_size - *dns_packet_len_p < opt_rr_len) {
         *request_edns_payload_size = (size_t) 0U;
@@ -191,4 +193,70 @@ edns_add_section(ProxyContext * const proxy_context,
     assert(*dns_packet_len_p <= 0xFFFF);
 
     return 0;
+}
+
+static int
+_edns_parse_char(uint8_t opendns_device_id[OPENDNS_DEVICE_ID_SIZE],
+                 size_t * const opendns_device_id_pos_p, int * const state_p,
+                 const int c, uint8_t * const val_p)
+{
+    uint8_t c_val;
+
+    switch (*state_p) {
+    case 0:
+    case 1:
+        if (isspace(c) || (c == ':' && *state_p == 0)) {
+            break;
+        }
+        if (c == '#') {
+            *state_p = 2;
+            break;
+        }
+        if (!isxdigit(c)) {
+            return -1;
+        }
+        c_val = (c >= '0' && c <= '9') ? c - '0' : c - 'a' + 10;
+        assert(c_val < 16U);
+        if (*state_p == 0) {
+            *val_p = c_val * 16U;
+            *state_p = 1;
+        } else {
+            *val_p |= c_val;
+            opendns_device_id[(*opendns_device_id_pos_p)++] = *val_p;
+            if (*opendns_device_id_pos_p >= OPENDNS_DEVICE_ID_SIZE) {
+                return 0;
+            }
+            *state_p = 0;
+        }
+    case 2:
+        if (c == '\n') {
+            *state_p = 0;
+        }
+    }
+    return 1;
+}
+
+int
+edns_fingerprint_to_opendns_device_id(const char * const fingerprint,
+                                      uint8_t opendns_device_id[OPENDNS_DEVICE_ID_SIZE])
+{
+    const char *p = fingerprint;
+    size_t      opendns_device_id_pos = (size_t) 0U;
+    int         c;
+    int         ret;
+    int         state = 0;
+    uint8_t     val = 0U;
+
+    if (fingerprint == NULL) {
+        return -1;
+    }
+    while ((c = tolower((int) (unsigned char) *p)) != 0) {
+        ret = _edns_parse_char(opendns_device_id, &opendns_device_id_pos,
+                               &state, c, &val);
+        if (ret <= 0) {
+            return ret;
+        }
+        p++;
+    }
+    return -1;
 }

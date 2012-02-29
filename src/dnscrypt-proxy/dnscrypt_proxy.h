@@ -62,8 +62,11 @@
 
 #define DNS_DEFAULT_EDNS_PAYLOAD_SIZE 1280U
 
+#define OPENDNS_DEVICE_ID_SIZE 8U
+
 typedef struct ProxyContext_ {
     uint8_t                  dnscrypt_magic_query[DNSCRYPT_MAGIC_QUERY_LEN];
+    uint8_t                  opendns_device_id[OPENDNS_DEVICE_ID_SIZE];
     uint8_t                  provider_publickey[crypto_sign_ed25519_PUBLICKEYBYTES];
     uint8_t                  resolver_publickey[crypto_box_PUBLICKEYBYTES];
     DNSCryptClient           dnscrypt_client;
@@ -93,6 +96,7 @@ typedef struct ProxyContext_ {
     int                      log_fd;
     uint16_t                 local_port;
     uint16_t                 resolver_port;
+    _Bool                    has_opendns_device_id;
     _Bool                    daemonize;
     _Bool                    listeners_started;
     _Bool                    tcp_only;

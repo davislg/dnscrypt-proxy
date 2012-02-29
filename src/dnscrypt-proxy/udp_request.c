@@ -290,11 +290,16 @@ client_to_proxy_cb(uv_udp_t *handle, ssize_t nread, uv_buf_t buf,
     memcpy(udp_request->dns_packet, buf.base, udp_request->dns_packet_len);
     uv_alloc_release_buffer(proxy_context, &buf);
 
+    const uint8_t *opendns_device_id = NULL;
+
+    if (proxy_context->has_opendns_device_id != 0) {
+        opendns_device_id = proxy_context->opendns_device_id;
+    }
     edns_add_section(proxy_context,
                      udp_request->dns_packet, &udp_request->dns_packet_len,
                      sizeof udp_request->dns_packet,
                      &request_edns_payload_size,
-                     NULL);
+                     opendns_device_id);
 
     udp_request->client_addr_len = sizeof(struct sockaddr_in);
     memcpy(&udp_request->client_addr, client_addr,

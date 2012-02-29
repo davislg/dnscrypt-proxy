@@ -76,6 +76,29 @@ Intead, run a DNS cache like \fBUnbound\fR, and configure it to use \fBdnscrypt\
 .P
 A public key is 256\-bit long, and it has to be specified as a hexadecimal string, with optional columns\.
 .
+.SH "OPENDNS SPECIFIC FLAGS"
+.
+.IP "\(bu" 4
+\fB\-0\fR, \fB\-\-opendns\-device\-id=<device id>\fR: tag outgoing UDP queries with an OpenDNS\-specific device identifier\.
+.
+.IP "" 0
+.
+.P
+Columns are optional and can be placed anywhere between hex bytes:
+.
+.P
+OpenDNS device ID example:
+.
+.IP "" 4
+.
+.nf
+
+\-\-opendns\-device\-id=CA:FE:BA:BE:DEAD:BEEF
+.
+.fi
+.
+.IP "" 0
+.
 .SH "SIMPLE USAGE EXAMPLE"
 .
 .nf

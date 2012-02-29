@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "dnscrypt_proxy.h"
+#include "edns.h"
 #include "options.h"
 #include "logger.h"
 #include "pid_file.h"
@@ -28,6 +29,7 @@ static struct option getopt_long_options[] = {
     { "provider-key", 1, NULL, 'k' },
     { "logfile", 1, NULL, 'l' },
     { "max-active-requests", 1, NULL, 'n' },
+    { "opendns-device-id", 1, NULL, '0' },
     { "pidfile", 1, NULL, 'p' },
     { "resolver-address", 1, NULL, 'r' },
     { "tcp-port", 1, NULL, 't' },
@@ -98,6 +100,7 @@ void options_init_with_default(AppContext * const app_context,
         .user_id = (uid_t) 0,
         .user_group = (uid_t) 0,
         .user_dir = NULL,
+        .has_opendns_device_id = 0,
         .daemonize = 0,
         .tcp_only = 0
     };
@@ -157,6 +160,15 @@ options_parse(AppContext * const app_context,
                                    getopt_options, getopt_long_options,
                                    &option_index)) != -1) {
         switch (opt_flag) {
+        case '0':
+            if (edns_fingerprint_to_opendns_device_id
+                (optarg, proxy_context->opendns_device_id) != 0) {
+                logger_noformat(proxy_context, LOG_ERR,
+                                "Invalid OpenDNS device id");
+                exit(1);
+            }
+            proxy_context->has_opendns_device_id = 1;
+            break;
         case 'a':
             proxy_context->listen_ip = optarg;
             break;

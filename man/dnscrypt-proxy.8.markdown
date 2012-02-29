@@ -73,6 +73,17 @@ ports.
 A public key is 256-bit long, and it has to be specified as a hexadecimal
 string, with optional columns.
 
+## OPENDNS SPECIFIC FLAGS
+
+  * `-0`, `--opendns-device-id=<device id>`: tag outgoing UDP queries with
+an OpenDNS-specific device identifier.
+
+Columns are optional and can be placed anywhere between hex bytes:
+
+OpenDNS device ID example:
+
+    --opendns-device-id=CA:FE:BA:BE:DEAD:BEEF
+
 ## SIMPLE USAGE EXAMPLE
 
     $ dnscrypt-proxy --daemonize

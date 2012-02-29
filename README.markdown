@@ -180,3 +180,9 @@ are usually safe.
 
 A value below or equal to 512 will disable this mechanism, unless a
 client sends a packet with an OPT section providing a payload size.
+
+OpenDNS-specific features
+-------------------------
+
+Outgoing UDP queries can be tagged with an OpenDNS device id using the
+`--opendns-device-id=<device id>` flag.
